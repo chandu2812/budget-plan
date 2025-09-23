@@ -10,7 +10,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 print("Flask app object created.") # <-- DEBUG LOG
-app.secret_key = secrets.token_hex(16)
+app.secret_key = os.environ.get('SECRET_KEY')
 
 # ------ DB helpers ------
 
