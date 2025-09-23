@@ -9,6 +9,7 @@ import secrets
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
+print("Flask app object created.")  
 app.secret_key = secrets.token_hex(16)
 
 # ------ HTML Templates ------
@@ -542,83 +543,53 @@ MAIN_HTML = """
 
 # ------ DB helpers ------
 
+
+DB_PATH = '/tmp/budget.db' if os.environ.get('VERCEL') else 'budget.db'
+print(f"DATABASE_PATH is set to: {DB_PATH}")
+
 def get_db():
-    conn = sqlite3.connect('budget.db', detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
-    conn.row_factory = sqlite3.Row
-    return conn
+    print("Attempting to get DB connection...")
+    try:
+        conn = sqlite3.connect(DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
+        conn.row_factory = sqlite3.Row
+        print("DB connection successful.")
+        return conn
+    except Exception as e:
+        print(f"!!! ERROR in get_db: {e}")
+        raise
 
 def init_db():
-    with get_db() as conn:
-        conn.execute('PRAGMA foreign_keys = ON;') # Enforce foreign keys
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS income (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                amount DECIMAL(10,2) NOT NULL,
-                month_year VARCHAR(7) NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-                UNIQUE(user_id, month_year)
-            )
-        ''')
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS budgets (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                category VARCHAR(100) NOT NULL,
-                amount DECIMAL(10,2) NOT NULL,
-                month_year VARCHAR(7) NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-                UNIQUE(user_id, category, month_year)
-            )
-        ''')
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS expenses (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                category VARCHAR(100) NOT NULL,
-                amount DECIMAL(10,2) NOT NULL,
-                description TEXT,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-            )
-        ''')
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS goals (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                name VARCHAR(100) NOT NULL,
-                target_amount DECIMAL(10,2) NOT NULL,
-                current_amount DECIMAL(10,2) DEFAULT 0,
-                deadline DATE NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-                UNIQUE(user_id, name)
-            )
-        ''')
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS notifications (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                message TEXT NOT NULL,
-                type VARCHAR(50) NOT NULL,
-                is_read BOOLEAN DEFAULT FALSE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-            )
-        ''')
-        conn.commit()
+    print("init_db function called.")
+    try:
+        db_exists = os.path.exists(DB_PATH)
+        print(f"Database exists check: {db_exists}")
 
-init_db()
+        with get_db() as conn:
+            if not db_exists:
+                print("Database does not exist. Creating new schema...")
+                conn.execute('PRAGMA foreign_keys = ON;')
+                print("Creating tables...")
+                conn.execute('''
+                    CREATE TABLE users (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL,
+                        password_hash TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+                # PASTE ALL YOUR OTHER CREATE TABLE STATEMENTS HERE
+                # For example: conn.execute('''CREATE TABLE income (...)''') etc.
+                conn.execute('''CREATE TABLE income (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, amount DECIMAL(10,2) NOT NULL, month_year VARCHAR(7) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE, UNIQUE(user_id, month_year))''')
+                conn.execute('''CREATE TABLE budgets (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, category VARCHAR(100) NOT NULL, amount DECIMAL(10,2) NOT NULL, month_year VARCHAR(7) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE, UNIQUE(user_id, category, month_year))''')
+                conn.execute('''CREATE TABLE expenses (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, category VARCHAR(100) NOT NULL, amount DECIMAL(10,2) NOT NULL, description TEXT, timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE)''')
+                conn.execute('''CREATE TABLE goals (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, name VARCHAR(100) NOT NULL, target_amount DECIMAL(10,2) NOT NULL, current_amount DECIMAL(10,2) DEFAULT 0, deadline DATE NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE, UNIQUE(user_id, name))''')
+                conn.execute('''CREATE TABLE notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, message TEXT NOT NULL, type VARCHAR(50) NOT NULL, is_read BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE)''')
+                print("All tables created.")
+                conn.commit()
+                print("Schema committed.")
+            else:
+                print("Database already exists. Skipping schema creation.")
+    except Exception as e:
+        print(f"!!! ERROR in init_db: {e}")
+        raise
 
 # ------ Flask routes ------
 
