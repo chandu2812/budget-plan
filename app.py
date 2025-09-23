@@ -9,8 +9,50 @@ import secrets
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
-print("Flask app object created.")  
+print("Flask app object created.") # <-- DEBUG LOG
 app.secret_key = secrets.token_hex(16)
+
+# ------ DB helpers ------
+
+DB_PATH = '/tmp/budget.db' if os.environ.get('VERCEL') else 'budget.db'
+print(f"DATABASE_PATH is set to: {DB_PATH}") # <-- DEBUG LOG
+
+def get_db():
+    print("Attempting to get DB connection...") # <-- DEBUG LOG
+    try:
+        conn = sqlite3.connect(DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
+        conn.row_factory = sqlite3.Row
+        print("DB connection successful.") # <-- DEBUG LOG
+        return conn
+    except Exception as e:
+        print(f"!!! ERROR in get_db: {e}") # <-- DEBUG LOG
+        raise
+
+def init_db():
+    print("init_db function called.") # <-- DEBUG LOG
+    try:
+        db_exists = os.path.exists(DB_PATH)
+        print(f"Database exists check: {db_exists}") # <-- DEBUG LOG
+
+        with get_db() as conn:
+            if not db_exists:
+                print("Database does not exist. Creating new schema...") # <-- DEBUG LOG
+                conn.execute('PRAGMA foreign_keys = ON;')
+                print("Creating tables...") # <-- DEBUG LOG
+                conn.execute('''CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+                conn.execute('''CREATE TABLE income (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, amount DECIMAL(10,2) NOT NULL, month_year VARCHAR(7) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE, UNIQUE(user_id, month_year))''')
+                conn.execute('''CREATE TABLE budgets (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, category VARCHAR(100) NOT NULL, amount DECIMAL(10,2) NOT NULL, month_year VARCHAR(7) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE, UNIQUE(user_id, category, month_year))''')
+                conn.execute('''CREATE TABLE expenses (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, category VARCHAR(100) NOT NULL, amount DECIMAL(10,2) NOT NULL, description TEXT, timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE)''')
+                conn.execute('''CREATE TABLE goals (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, name VARCHAR(100) NOT NULL, target_amount DECIMAL(10,2) NOT NULL, current_amount DECIMAL(10,2) DEFAULT 0, deadline DATE NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE, UNIQUE(user_id, name))''')
+                conn.execute('''CREATE TABLE notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, message TEXT NOT NULL, type VARCHAR(50) NOT NULL, is_read BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE)''')
+                print("All tables created.") # <-- DEBUG LOG
+                conn.commit()
+                print("Schema committed.") # <-- DEBUG LOG
+            else:
+                print("Database already exists. Skipping schema creation.") # <-- DEBUG LOG
+    except Exception as e:
+        print(f"!!! ERROR in init_db: {e}") # <-- DEBUG LOG
+        raise
 
 # ------ HTML Templates ------
 
@@ -536,62 +578,13 @@ MAIN_HTML = """
         await loadNotifications();
     };
     function logout() { window.location.href = "/logout"; }
-  </script>
+    </script>
 </body>
 </html>
 """
 
-# ------ DB helpers ------
 
-
-DB_PATH = '/tmp/budget.db' if os.environ.get('VERCEL') else 'budget.db'
-print(f"DATABASE_PATH is set to: {DB_PATH}")
-
-def get_db():
-    print("Attempting to get DB connection...")
-    try:
-        conn = sqlite3.connect(DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
-        conn.row_factory = sqlite3.Row
-        print("DB connection successful.")
-        return conn
-    except Exception as e:
-        print(f"!!! ERROR in get_db: {e}")
-        raise
-
-def init_db():
-    print("init_db function called.")
-    try:
-        db_exists = os.path.exists(DB_PATH)
-        print(f"Database exists check: {db_exists}")
-
-        with get_db() as conn:
-            if not db_exists:
-                print("Database does not exist. Creating new schema...")
-                conn.execute('PRAGMA foreign_keys = ON;')
-                print("Creating tables...")
-                conn.execute('''
-                    CREATE TABLE users (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL,
-                        password_hash TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                ''')
-                # PASTE ALL YOUR OTHER CREATE TABLE STATEMENTS HERE
-                # For example: conn.execute('''CREATE TABLE income (...)''') etc.
-                conn.execute('''CREATE TABLE income (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, amount DECIMAL(10,2) NOT NULL, month_year VARCHAR(7) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE, UNIQUE(user_id, month_year))''')
-                conn.execute('''CREATE TABLE budgets (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, category VARCHAR(100) NOT NULL, amount DECIMAL(10,2) NOT NULL, month_year VARCHAR(7) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE, UNIQUE(user_id, category, month_year))''')
-                conn.execute('''CREATE TABLE expenses (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, category VARCHAR(100) NOT NULL, amount DECIMAL(10,2) NOT NULL, description TEXT, timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE)''')
-                conn.execute('''CREATE TABLE goals (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, name VARCHAR(100) NOT NULL, target_amount DECIMAL(10,2) NOT NULL, current_amount DECIMAL(10,2) DEFAULT 0, deadline DATE NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE, UNIQUE(user_id, name))''')
-                conn.execute('''CREATE TABLE notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, message TEXT NOT NULL, type VARCHAR(50) NOT NULL, is_read BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE)''')
-                print("All tables created.")
-                conn.commit()
-                print("Schema committed.")
-            else:
-                print("Database already exists. Skipping schema creation.")
-    except Exception as e:
-        print(f"!!! ERROR in init_db: {e}")
-        raise
-
-# ------ Flask routes ------
+init_db()
 
 @app.route('/')
 def home():
@@ -599,6 +592,7 @@ def home():
         return redirect(url_for('login'))
     return render_template_string(MAIN_HTML)
 
+# (Keep all your other @app.route functions here)
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -649,7 +643,6 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-# ------ API Routes ------
 def check_session():
     if not session.get('logged_in'):
         return jsonify({"error": "Not authorized"}), 401
@@ -692,7 +685,6 @@ def add_budget():
         conn.commit()
     return jsonify({"success": True})
 
-# NEW: Delete budget route
 @app.route('/api/budget/delete', methods=['POST'])
 def delete_budget():
     error_response, status_code = check_session()
@@ -735,7 +727,6 @@ def add_goal():
     except sqlite3.IntegrityError:
         return jsonify({"error": f"A goal with the name '{name}' already exists."}), 400
 
-# NEW: Delete goal route
 @app.route('/api/goal/delete', methods=['POST'])
 def delete_goal():
     error_response, status_code = check_session()
@@ -773,7 +764,6 @@ def get_trends():
     if error_response: return error_response, status_code
     return jsonify(generate_trend_analysis(session.get('user_id')))
 
-# ------ Helper functions ------
 def load_user_data(user_id):
     with get_db() as conn:
         current_month = datetime.now().strftime('%Y-%m')
@@ -814,6 +804,5 @@ def generate_trend_analysis(user_id):
             GROUP BY month ORDER BY month ''', (user_id, six_months_ago)).fetchall()
     return {'labels': [t['month'] for t in trends], 'expenses': [float(t['total_expenses']) for t in trends]}
 
-# ------ Run app ------
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
