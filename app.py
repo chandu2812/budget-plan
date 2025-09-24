@@ -190,8 +190,28 @@ MAIN_HTML = """
     .toast.show { opacity: 1; transform: translateY(0); }
     .toast-success { background-color: var(--success-color); }
     .toast-error { background-color: var(--danger-color); }
-    @media (max-width:900px) { .sidebar { display:none; } .main-content { margin-left:0; padding:12px; } }
-  </style>
+
+    /* --- NEW: Mobile Styles --- */
+    @media (max-width: 900px) {
+      .sidebar {
+        display: none;
+      }
+      .main-content {
+        margin-left: 0;
+        padding: 16px;
+      }
+      /* This makes form inputs stack vertically */
+      .two-col {
+        grid-template-columns: 1fr;
+      }
+      .card {
+        padding: 16px;
+      }
+      h2 {
+        font-size: 1.5rem;
+      }
+    }
+</style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body data-theme="light">
