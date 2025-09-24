@@ -7,6 +7,9 @@ from datetime import datetime, timedelta
 from contextlib import contextmanager
 import secrets
 from werkzeug.security import generate_password_hash, check_password_hash
+from dotenv import load_dotenv 
+
+load_dotenv() 
 
 app = Flask(__name__)
 print("Flask app object created.") # <-- DEBUG LOG
